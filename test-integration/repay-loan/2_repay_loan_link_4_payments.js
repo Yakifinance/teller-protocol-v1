@@ -35,9 +35,9 @@ module.exports = async ({processArgs, accounts, getContracts, timer, web3, nonce
   const signers = await accounts.getAllAt(12, 13);
   const senderTxConfig = await accounts.getTxConfigAt(1);
   const initialCollateralAmount = toDecimals(10000, collateralTokenDecimals);
-  await collateralToken.mint(senderTxConfig.from, initialCollateralAmount, senderTxConfig);
+  await collateralToken.transfer(senderTxConfig.from, initialCollateralAmount, { from: collateralToken.address });
   const borrowerTxConfig = { from: borrower };
-  await token.mint(borrowerTxConfig.from, maxAmountWei);
+  await token.transfer(borrowerTxConfig.from, maxAmountWei, { from: token.address });
 
   // Sets Initial Oracle Price
   console.log(`Settings initial oracle price: 1 ${tokenName} = ${initialOraclePrice.toFixed(0)} = ${toUnits(initialOraclePrice, collateralTokenDecimals)} ${collateralTokenName}`);

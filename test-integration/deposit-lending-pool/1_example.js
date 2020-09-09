@@ -12,7 +12,7 @@ module.exports = async ({processArgs, accounts, getContracts, timer}) => {
   const dai = await getContracts.getDeployed(tokens.get(tokenName));
   const tdai = await getContracts.getDeployed(teller.ttoken(tokenName));
   const amountWei = toDecimals(100, 18);
-  await dai.mint(senderTxConfig.from, amountWei, senderTxConfig);
+  await dai.transfer(senderTxConfig.from, amountWei, { from: dai.address });
 
   const lendingPoolTDai = await getContracts.getDeployed(teller.eth().lendingPool(tokenName));
   const lendingToken = await lendingPoolTDai.lendingToken();

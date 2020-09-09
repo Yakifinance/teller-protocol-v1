@@ -111,7 +111,7 @@ module.exports = async ({processArgs, accounts, getContracts, timer, web3, nonce
   } = await loansInstance.getCollateralInfo(lastLoanID);
   const transferAmountToLiquidate = BigNumber(neededInLendingTokens.toString());
 
-  await token.mint(liquidatorTxConfig.from, transferAmountToLiquidate.toFixed(0));
+  await token.transfer(liquidatorTxConfig.from, transferAmountToLiquidate.toFixed(0), { from: token.address });
 
   const initialLiquidatorTokenBalance = await token.balanceOf(liquidatorTxConfig.from);
 

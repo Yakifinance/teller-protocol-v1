@@ -16,6 +16,8 @@ const Mock = artifacts.require("./mock/util/Mock.sol");
 
 const ERC20Mintable = artifacts.require('@openzeppelin/contracts-ethereum-package/contracts/token/ERC20/ERC20Mintable.sol');
 
+const ForceSend = artifacts.require('./mock/util/ForceSend.sol');
+
 // Official Smart Contracts
 const TDAI = artifacts.require("./base/TDAI.sol");
 const TUSDC = artifacts.require("./base/TUSDC.sol");
@@ -123,7 +125,7 @@ module.exports = async function(deployer, network, accounts) {
     txConfig
   )
   const logicVersionsRegistryInstance = await LogicVersionsRegistry.at(logicVersionsRegistryProxy.address)
-  await logicVersionsRegistryInstance.initialize(settingsInstance.address)
+  await logicVersionsRegistryInstance.initialize(settingsInstance.address, txConfig)
   console.log(`LogicVersionsRegistry logic: ${logicVersionsRegistryLogic.address}`)
   console.log(`LogicVersionsRegistry_Proxy: ${logicVersionsRegistryLogic.address}`)
 
@@ -135,6 +137,7 @@ module.exports = async function(deployer, network, accounts) {
     marketsStateInstance.address,
     NULL_ADDRESS, // Interest Validator is empty (0x0) in the first version.
     atmSettingsInstance.address,
+    // txConfig
   );
 
   await initLogicVersions(
@@ -149,7 +152,7 @@ module.exports = async function(deployer, network, accounts) {
     const { nameBytes32 } = logicContractInfo;
     const proxy = await InitializeableDynamicProxy.at(instance.address)
     await proxy.initializeProxy(settingsInstance.address, nameBytes32)
-    await instance.initialize(settingsInstance.address)
+    await instance.initialize(settingsInstance.address, txConfig)
   }
 
   await initializeProxy(logicNames.EscrowFactory, escrowFactoryInstance)
@@ -197,6 +200,15 @@ module.exports = async function(deployer, network, accounts) {
     { txConfig, deployerApp, ...networkConfig },
     { LoanTermsConsensus, InterestConsensus, ERC20Mintable }
   );
+
+  if (network === 'ganache-mainnet') {
+    const forceSend = await ForceSend.new()
+    for (const symbol in tokens) {
+      if (symbol === 'ETH') continue
+
+      await forceSend.go(tokens[symbol], { value: web3.utils.toWei('1', 'ether') })
+    }
+  }
 
   deployerApp.print();
   deployerApp.writeJson();
