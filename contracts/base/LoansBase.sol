@@ -3,7 +3,6 @@ pragma experimental ABIEncoderV2;
 
 // Libraries and common
 import "../util/TellerCommon.sol";
-import "../util/SettingsConsts.sol";
 import "@openzeppelin/contracts-ethereum-package/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts-ethereum-package/contracts/token/ERC20/ERC20Detailed.sol";
 import "../util/ERC20DetailedLib.sol";
@@ -69,8 +68,6 @@ contract LoansBase is LoansInterface, Base {
 
     mapping(uint256 => TellerCommon.Loan) public loans;
 
-    SettingsConsts public consts;
-
     /* Modifiers */
 
     /**
@@ -127,18 +124,17 @@ contract LoansBase is LoansInterface, Base {
         @param loanRequest to validate.
      */
     modifier withValidLoanRequest(TellerCommon.LoanRequest memory loanRequest) {
-        require(
-            settings().getPlatformSettingValue(consts.MAXIMUM_LOAN_DURATION_SETTING()) >=
-                loanRequest.duration,
-            "DURATION_EXCEEDS_MAX_DURATION"
+        uint256 maxLoanDuration = settings().getPlatformSettingValue(
+            settings().consts().MAXIMUM_LOAN_DURATION_SETTING()
         );
-        require(
-            !settings().exceedsMaxLoanAmount(
-                lendingPool.lendingToken(),
-                loanRequest.amount
-            ),
-            "AMOUNT_EXCEEDS_MAX_AMOUNT"
+        require(maxLoanDuration >= loanRequest.duration, "DURATION_EXCEEDS_MAX_DURATION");
+
+        bool exceedsMaxLoanAmount = settings().exceedsMaxLoanAmount(
+            lendingPool.lendingToken(),
+            loanRequest.amount
         );
+        require(!exceedsMaxLoanAmount, "AMOUNT_EXCEEDS_MAX_AMOUNT");
+
         require(
             _isSupplyToDebtRatioValid(loanRequest.amount),
             "SUPPLY_TO_DEBT_EXCEEDS_MAX"
@@ -160,6 +156,22 @@ contract LoansBase is LoansInterface, Base {
      */
     function lendingToken() external view returns (address) {
         return lendingPool.lendingToken();
+    }
+
+    /**
+        @notice Returns the tToken in the lending pool
+        @return Address of the tToken
+     */
+    function tToken() external view returns (address) {
+        return lendingPool.tToken();
+    }
+
+    /**
+        @notice Returns the cToken in the lending pool
+        @return Address of the cToken
+     */
+    function cToken() external view returns (address) {
+        return lendingPool.cToken();
     }
 
     /**
@@ -222,7 +234,9 @@ contract LoansBase is LoansInterface, Base {
         require(
             loans[loanID].lastCollateralIn <=
                 now.sub(
-                    settings().getPlatformSettingValue(consts.SAFETY_INTERVAL_SETTING())
+                    settings().getPlatformSettingValue(
+                        settings().consts().SAFETY_INTERVAL_SETTING()
+                    )
                 ),
             "COLLATERAL_DEPOSITED_RECENTLY"
         );
@@ -345,9 +359,12 @@ contract LoansBase is LoansInterface, Base {
         // the caller gets the collateral from the loan
         _payOutCollateral(loanID, collateral, msg.sender);
 
-        uint256 tokenPayment = collateralInTokens
-            .mul(settings().getPlatformSettingValue(consts.LIQUIDATE_ETH_PRICE_SETTING()))
-            .div(TEN_THOUSAND);
+        uint256 liquidateEthPrice = settings().getPlatformSettingValue(
+            settings().consts().LIQUIDATE_ETH_PRICE_SETTING()
+        );
+        uint256 tokenPayment = collateralInTokens.mul(liquidateEthPrice).div(
+            TEN_THOUSAND
+        );
         // the liquidator pays x% of the collateral price
         lendingPool.liquidationPayment(tokenPayment, msg.sender);
 
@@ -507,7 +524,6 @@ contract LoansBase is LoansInterface, Base {
         priceOracle = priceOracleAddress;
         lendingPool = LendingPoolInterface(lendingPoolAddress);
         loanTermsConsensus = LoanTermsConsensusInterface(loanTermsConsensusAddress);
-        consts = new SettingsConsts();
     }
 
     /**
@@ -564,10 +580,7 @@ contract LoansBase is LoansInterface, Base {
         uint256 oneLendingTokenPriceWei = uint256(
             PairAggregatorInterface(priceOracle).getLatestAnswer()
         );
-        uint256 tokenValue = weiAmount.mul(aWholeLendingToken).div(
-            oneLendingTokenPriceWei
-        );
-        return tokenValue;
+        return weiAmount.mul(aWholeLendingToken).div(oneLendingTokenPriceWei);
     }
 
     /**
@@ -614,9 +627,10 @@ contract LoansBase is LoansInterface, Base {
         uint256 collateralRatio,
         uint256 maxLoanAmount
     ) internal view returns (TellerCommon.Loan memory) {
-        uint256 termsExpiry = now.add(
-            settings().getPlatformSettingValue(consts.TERMS_EXPIRY_TIME_SETTING())
+        uint256 termsExpiryTime = settings().getPlatformSettingValue(
+            settings().consts().TERMS_EXPIRY_TIME_SETTING()
         );
+        uint256 termsExpiry = now.add(termsExpiryTime);
         return
             TellerCommon.Loan({
                 id: loanID,
