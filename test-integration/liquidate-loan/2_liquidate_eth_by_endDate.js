@@ -8,7 +8,7 @@ const LoanInfoPrinter = require('../../test/utils/printers/LoanInfoPrinter');
 const { createMultipleSignedLoanTermsResponses, createLoanTermsRequest } = require('../../test/utils/loan-terms-helper');
 const platformSettingsNames = require('../../test/utils/platformSettingsNames');
 
-module.exports = async ({processArgs, accounts, getContracts, timer, web3, nonces, chainId}) => {
+module.exports = async ({processArgs, accounts, getContracts, timer, web3, nonces, chainId, swapper}) => {
   console.log('Liquidate Loan by End Time');
   const tokenName = processArgs.getValue('testTokenName');
   const settingsInstance = await getContracts.getDeployed(teller.settings());
@@ -41,6 +41,7 @@ module.exports = async ({processArgs, accounts, getContracts, timer, web3, nonce
   // Deposit tokens on lending pool.
   console.log('Depositing tokens on lending pool...');
   const lenderTxConfig = await accounts.getTxConfigAt(0);
+  await swapper.swapForExact([ swapper.wethAddress, token.address ], lendingPoolDepositAmountWei, lenderTxConfig)
   await token.approve(lendingPoolInstance.address, lendingPoolDepositAmountWei, lenderTxConfig);
   const depositResult = await lendingPoolInstance.deposit(lendingPoolDepositAmountWei, lenderTxConfig);
   lendingPool
@@ -111,7 +112,8 @@ module.exports = async ({processArgs, accounts, getContracts, timer, web3, nonce
   } = await loansInstance.getCollateralInfo(lastLoanID);
   const transferAmountToLiquidate = BigNumber(neededInLendingTokens.toString());
 
-  await token.mint(liquidatorTxConfig.from, transferAmountToLiquidate.toFixed(0));
+  await swapper.swapForExact([ swapper.wethAddress, token.address ], transferAmountToLiquidate.toFixed(0), liquidatorTxConfig)
+  // await token.mint(liquidatorTxConfig.from, transferAmountToLiquidate.toFixed(0));
 
   const initialLiquidatorTokenBalance = await token.balanceOf(liquidatorTxConfig.from);
 
@@ -137,4 +139,8 @@ module.exports = async ({processArgs, accounts, getContracts, timer, web3, nonce
     BigNumber(initialLiquidatorTokenBalance.toString()).minus(finalLiquidatorTokenBalance.toString()).toFixed(),
     'Invalid final liquidator tokens balance.'
   );
+
+  const nextTimestamp = await timer.getCurrentTimestampInSecondsAndSum(minutesToSeconds(2000000));
+  console.log(`Advancing time to create another loan (Current: ${(await timer.getCurrentDate())})...`);
+  await timer.advanceBlockAtTime(nextTimestamp);
 };

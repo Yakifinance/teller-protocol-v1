@@ -8,7 +8,7 @@ const { createMultipleSignedLoanTermsResponses, createLoanTermsRequest } = requi
 const assert = require("assert");
 const platformSettingsNames = require('../../test/utils/platformSettingsNames');
 
-module.exports = async ({processArgs, accounts, getContracts, timer, web3, nonces, chainId}) => {
+module.exports = async ({processArgs, accounts, getContracts, timer, web3, nonces, chainId, swapper}) => {
   console.log('Repay Loan in 4 Payments');
   const tokenName = processArgs.getValue('testTokenName');
   const collateralTokenName = 'LINK';
@@ -35,9 +35,11 @@ module.exports = async ({processArgs, accounts, getContracts, timer, web3, nonce
   const signers = await accounts.getAllAt(12, 13);
   const senderTxConfig = await accounts.getTxConfigAt(1);
   const initialCollateralAmount = toDecimals(10000, collateralTokenDecimals);
-  await collateralToken.mint(senderTxConfig.from, initialCollateralAmount, senderTxConfig);
+  await swapper.swapForExact([ swapper.wethAddress, collateralToken.address ], initialCollateralAmount, senderTxConfig)
+  // await collateralToken.mint(senderTxConfig.from, initialCollateralAmount, senderTxConfig);
   const borrowerTxConfig = { from: borrower };
-  await token.mint(borrowerTxConfig.from, maxAmountWei);
+  await swapper.swapForExact([ swapper.wethAddress, token.address ], maxAmountWei, borrowerTxConfig)
+  // await token.mint(borrowerTxConfig.from, maxAmountWei);
 
   // Sets Initial Oracle Price
   console.log(`Settings initial oracle price: 1 ${tokenName} = ${initialOraclePrice.toFixed(0)} = ${toUnits(initialOraclePrice, collateralTokenDecimals)} ${collateralTokenName}`);
@@ -46,6 +48,7 @@ module.exports = async ({processArgs, accounts, getContracts, timer, web3, nonce
   // Deposit tokens on lending pool.
   console.log('Depositing tokens on lending pool...');
   const lenderTxConfig = await accounts.getTxConfigAt(0);
+  await swapper.swapForExact([ swapper.wethAddress, token.address ], lendingPoolDepositAmountWei, lenderTxConfig)
   await token.approve(lendingPoolInstance.address, lendingPoolDepositAmountWei, lenderTxConfig);
   const depositResult = await lendingPoolInstance.deposit(lendingPoolDepositAmountWei, lenderTxConfig);
   lendingPool
@@ -108,8 +111,8 @@ module.exports = async ({processArgs, accounts, getContracts, timer, web3, nonce
     );
 
   console.log(`Advancing time to take out loan (current: ${(await timer.getCurrentDate())})...`);
-  const nextTimestamp = await timer.getCurrentTimestampInSecondsAndSum(minutesToSeconds(2));
-  await timer.advanceBlockAtTime(nextTimestamp);
+  const nextTimestamp_1 = await timer.getCurrentTimestampInSecondsAndSum(minutesToSeconds(2));
+  await timer.advanceBlockAtTime(nextTimestamp_1);
   
   // Take out a loan.
   console.log(`Taking out loan id ${lastLoanID}...`);
@@ -226,4 +229,8 @@ module.exports = async ({processArgs, accounts, getContracts, timer, web3, nonce
     loanStatuses.Closed,
     'Invalid final loan staus.'
   );
+
+  const nextTimestamp = await timer.getCurrentTimestampInSecondsAndSum(minutesToSeconds(2000000));
+  console.log(`Advancing time to create another loan (Current: ${(await timer.getCurrentDate())})...`);
+  await timer.advanceBlockAtTime(nextTimestamp);
 };

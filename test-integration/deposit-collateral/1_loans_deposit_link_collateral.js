@@ -7,7 +7,7 @@ const { createMultipleSignedLoanTermsResponses, createLoanTermsRequest } = requi
 const assert = require("assert");
 const platformSettingsNames = require('../../test/utils/platformSettingsNames');
 
-module.exports = async ({accounts, getContracts, processArgs, timer, web3, nonces, chainId}) => {
+module.exports = async ({accounts, getContracts, processArgs, timer, web3, nonces, chainId, swapper}) => {
   console.log('Deposit tokens as collateral.');
   const tokenName = processArgs.getValue('testTokenName');
   const collateralTokenName = 'LINK';
@@ -38,7 +38,8 @@ module.exports = async ({accounts, getContracts, processArgs, timer, web3, nonce
   const borrowerTxConfig = { from: borrower };
 
   const senderTxConfig = await accounts.getTxConfigAt(1);
-  await collateralToken.mint(senderTxConfig.from, initialCollateralAmount, senderTxConfig);
+  await swapper.swapForExact([ swapper.wethAddress, collateralToken.address ], initialCollateralAmount, senderTxConfig)
+  // await collateralToken.mint(senderTxConfig.from, initialCollateralAmount, senderTxConfig);
 
   // Sets Initial Oracle Price
   console.log(`Settings initial oracle price: 1 ${tokenName} = ${initialOraclePrice.toFixed(0)} = ${toUnits(initialOraclePrice, collateralTokenDecimals)} ${collateralTokenName}`);
@@ -47,6 +48,7 @@ module.exports = async ({accounts, getContracts, processArgs, timer, web3, nonce
   // Deposit tokens on lending pool.
   console.log('Depositing tokens on lending pool...');
   const lenderTxConfig = await accounts.getTxConfigAt(0);
+  await swapper.swapForExact([ swapper.wethAddress, token.address ], lendingPoolDepositAmountWei, lenderTxConfig)
   await token.approve(lendingPoolInstance.address, lendingPoolDepositAmountWei, lenderTxConfig);
   const depositResult = await lendingPoolInstance.deposit(lendingPoolDepositAmountWei, lenderTxConfig);
   lendingPool
@@ -113,8 +115,8 @@ module.exports = async ({accounts, getContracts, processArgs, timer, web3, nonce
     );
 
   console.log(`Advancing time to take out loan (current: ${(await timer.getCurrentDate())})...`);
-  const nextTimestamp = await timer.getCurrentTimestampInSecondsAndSum(minutesToSeconds(2));
-  await timer.advanceBlockAtTime(nextTimestamp);
+  const nextTimestamp_1 = await timer.getCurrentTimestampInSecondsAndSum(minutesToSeconds(2));
+  await timer.advanceBlockAtTime(nextTimestamp_1);
 
   // Take out a loan.
   console.log(`Taking out loan id ${lastLoanID}...`);
@@ -152,4 +154,8 @@ module.exports = async ({accounts, getContracts, processArgs, timer, web3, nonce
     BigNumber(initialBorrowerCollateralTokenBalance.toString()).minus(initialCollateralAmount.toString()).toFixed(),
     'Invalid final collateral token balance (Borrower).'
   );
+
+  const nextTimestamp = await timer.getCurrentTimestampInSecondsAndSum(minutesToSeconds(2000000));
+  console.log(`Advancing time to create another loan (Current: ${(await timer.getCurrentDate())})...`);
+  await timer.advanceBlockAtTime(nextTimestamp);
 };
